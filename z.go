@@ -16,11 +16,11 @@ type Z struct {
 	r  *http.Request
 }
 
-func (z *Z) String(respStr string) {
+func (z *Z) String(statusCode int, respStr string) {
 	z.rw.Write([]byte(respStr))
 }
 
-func (z *Z) JSON(respJSON any) {
+func (z *Z) JSON(statusCode int, respJSON any) {
 	z.rw.Header().Set("content-type", "application/json")
 	json.NewEncoder(z.rw).Encode(respJSON)
 }

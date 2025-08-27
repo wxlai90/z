@@ -3,6 +3,7 @@ package z
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -42,6 +43,11 @@ func (app *App) GET(path string, handler func(z *Z)) {
 
 		handler(zHandler)
 	})
+}
+
+func (app *App) Start(port string) {
+	log.Printf("Running on %s\n", port)
+	log.Fatalln(http.ListenAndServe(port, app.mux))
 }
 
 func New() *App {

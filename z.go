@@ -36,17 +36,6 @@ func (z *Z) BindBody(reqBodyType any) error {
 	return json.NewDecoder(z.r.Body).Decode(reqBodyType)
 }
 
-func (app *App) GET(path string, handler func(z *Z)) {
-	app.mux.HandleFunc(fmt.Sprintf("%s %s", http.MethodGet, path), func(w http.ResponseWriter, r *http.Request) {
-		zHandler := &Z{
-			rw: w,
-			r:  r,
-		}
-
-		handler(zHandler)
-	})
-}
-
 func (app *App) Start(port string) {
 	log.Printf("Running on %s\n", port)
 	log.Fatalln(http.ListenAndServe(port, app.mux))

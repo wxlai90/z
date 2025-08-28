@@ -1,3 +1,3 @@
 package z
 
-type MiddlewareFunc func(handler HandlerFunc) HandlerFunc
+type MiddlewareFunc func(next HandlerFunc) HandlerFunc

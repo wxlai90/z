@@ -1,7 +1,6 @@
 package z
 
 import (
-	"log"
 	"net/http"
 )
 
@@ -13,11 +12,6 @@ type App struct {
 type Z struct {
 	rw http.ResponseWriter
 	r  *http.Request
-}
-
-func (app *App) Start(port string) {
-	log.Printf("Running on %s\n", port)
-	log.Fatalln(http.ListenAndServe(port, app.mux))
 }
 
 func (app *App) Use(middlewareFunc MiddlewareFunc) {

@@ -13,3 +13,11 @@ func (z *Z) BindBody(reqBodyType any) error {
 	defer z.r.Body.Close()
 	return json.NewDecoder(z.r.Body).Decode(reqBodyType)
 }
+
+func (z *Z) PathValue(key string) string {
+	return z.r.PathValue(key)
+}
+
+func (z *Z) Query(key string) string {
+	return z.r.URL.Query().Get(key)
+}

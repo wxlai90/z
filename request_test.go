@@ -32,3 +32,22 @@ func TestBindBodyNil(t *testing.T) {
 		t.Error("Expected error for nil body")
 	}
 }
+
+func TestPathValue(t *testing.T) {
+	req, _ := http.NewRequest("GET", "/users/123", nil)
+	z := &Z{r: req}
+	z.r.SetPathValue("id", "123")
+	id := z.PathValue("id")
+	if id != "123" {
+		t.Errorf("Expected id '123', got '%s'", id)
+	}
+}
+
+func TestQuery(t *testing.T) {
+	req, _ := http.NewRequest("GET", "/search?q=test", nil)
+	z := &Z{r: req}
+	q := z.Query("q")
+	if q != "test" {
+		t.Errorf("Expected query 'test', got '%s'", q)
+	}
+}

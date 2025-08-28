@@ -80,3 +80,23 @@ func TestMiddlewareChaining(t *testing.T) {
 		t.Errorf("Middleware chain incorrect: %v", chain)
 	}
 }
+
+func TestZResponseWriterAccess(t *testing.T) {
+	req, _ := http.NewRequest("GET", "/test", nil)
+	rw := &mockResponseWriter{}
+	z := &Z{rw: rw, r: req}
+
+	if z.ResponseWriter() != rw {
+		t.Error("ResponseWriter() should return the same http.ResponseWriter instance")
+	}
+}
+
+func TestZRequestAccess(t *testing.T) {
+	req, _ := http.NewRequest("GET", "/test", nil)
+	rw := &mockResponseWriter{}
+	z := &Z{rw: rw, r: req}
+
+	if z.Request() != req {
+		t.Error("Request() should return the same *http.Request instance")
+	}
+}

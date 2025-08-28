@@ -28,3 +28,11 @@ func New() *App {
 		middlewares: []MiddlewareFunc{},
 	}
 }
+
+func (z *Z) ResponseWriter() http.ResponseWriter {
+	return z.rw
+}
+
+func (z *Z) Request() *http.Request {
+	return z.r
+}

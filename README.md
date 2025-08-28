@@ -4,11 +4,11 @@ A minimalistic wrapper around Go's `net/http` for Go > 1.22.
 
 ## Features
 
-*   Minimalistic and easy to use
-*   Built on top of `net/http`
-*   Supports path parameters (Go > 1.22)
-*   Middleware support
-*   Helper functions for common tasks
+- Minimalistic and easy to use
+- Built on top of `net/http`
+- Supports path parameters (Go > 1.22)
+- Middleware support
+- Helper functions for common tasks
 
 ## Installation
 
@@ -56,22 +56,52 @@ func main() {
 
 ### Request Helpers
 
-*   `BindBody(reqBodyType any) error`: Binds the request body to a struct.
-*   `PathValue(key string) string`: Gets a path parameter by key.
-*   `Query(key string) string`: Gets a query parameter by key.
-*   `Header(key string) string`: Gets a request header by key.
-*   `Cookie(name string) (*http.Cookie, error)`: Gets a cookie by name.
-*   `FormFile(key string) (multipart.File, *multipart.FileHeader, error)`: Gets a file from a multipart form.
+- `BindBody(reqBodyType any) error`: Binds the request body to a struct.
+- `PathValue(key string) string`: Gets a path parameter by key.
+- `Query(key string) string`: Gets a query parameter by key.
+- `Header(key string) string`: Gets a request header by key.
+- `Cookie(name string) (*http.Cookie, error)`: Gets a cookie by name.
+- `FormFile(key string) (multipart.File, *multipart.FileHeader, error)`: Gets a file from a multipart form.
 
 ### Response Helpers
 
-*   `String(statusCode int, respStr string)`: Sends a string response.
-*   `JSON(statusCode int, respJSON any)`: Sends a JSON response.
-*   `Ok(body string)`: Sends a string response with a 200 status code.
-*   `OkJSON(data interface{})`: Sends a JSON response with a 200 status code.
-*   `SetHeader(key, value string)`: Sets a response header.
-*   `SetCookie(cookie *http.Cookie)`: Sets a cookie.
-*   `Error(err error, code int)`: Sends an error response.
+- `String(statusCode int, respStr string)`: Sends a string response.
+- `JSON(statusCode int, respJSON any)`: Sends a JSON response.
+- `Ok(body string)`: Sends a string response with a 200 status code.
+- `OkJSON(data interface{})`: Sends a JSON response with a 200 status code.
+- `SetHeader(key, value string)`: Sets a response header.
+- `SetCookie(cookie *http.Cookie)`: Sets a cookie.
+- `Error(err error, code int)`: Sends an error response.
+
+### Escape Hatches
+
+When you need to break out of the z framework's abstractions and access the underlying Go `net/http` objects:
+
+- `ResponseWriter() http.ResponseWriter`: Returns the underlying `http.ResponseWriter`.
+- `Request() *http.Request`: Returns the underlying `*http.Request`.
+
+#### Example Usage
+
+```go
+app.GET("/download", func(z *z.Z) {
+    w := z.ResponseWriter()
+    w.Header().Set("Content-Disposition", "attachment; filename=file.txt")
+    w.Header().Set("Content-Type", "application/octet-stream")
+
+    w.Write([]byte("large file content..."))
+})
+
+app.POST("/upload", func(z *z.Z) {
+    r := z.Request()
+
+    if r.ContentLength > 10*1024*1024 {
+        z.Error(fmt.Errorf("file too large"), http.StatusRequestEntityTooLarge)
+        return
+    }
+
+    z.Ok("Upload processed")
+})
+```
 
 ## Test Results
 

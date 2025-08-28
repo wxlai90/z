@@ -6,7 +6,8 @@ import (
 )
 
 type App struct {
-	mux *http.ServeMux
+	mux         *http.ServeMux
+	middlewares []MiddlewareFunc
 }
 
 type Z struct {
@@ -19,8 +20,13 @@ func (app *App) Start(port string) {
 	log.Fatalln(http.ListenAndServe(port, app.mux))
 }
 
+func (app *App) Use(middlewareFunc MiddlewareFunc) {
+	app.middlewares = append(app.middlewares, middlewareFunc)
+}
+
 func New() *App {
 	return &App{
-		mux: http.NewServeMux(),
+		mux:         http.NewServeMux(),
+		middlewares: []MiddlewareFunc{},
 	}
 }

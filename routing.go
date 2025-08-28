@@ -5,57 +5,44 @@ import (
 	"net/http"
 )
 
-func (app *App) GET(path string, handler func(z *Z)) {
-	app.mux.HandleFunc(fmt.Sprintf("%s %s", http.MethodGet, path), func(w http.ResponseWriter, r *http.Request) {
+type HandlerFunc func(z *Z)
+
+func (app *App) handle(method string, path string, handler HandlerFunc, routeMiddlewares ...MiddlewareFunc) {
+	finalHandler := handler
+
+	for i := len(routeMiddlewares) - 1; i >= 0; i-- {
+		finalHandler = routeMiddlewares[i](finalHandler)
+	}
+
+	for i := len(app.middlewares) - 1; i >= 0; i-- {
+		finalHandler = app.middlewares[i](finalHandler)
+	}
+
+	app.mux.HandleFunc(fmt.Sprintf("%s %s", method, path), func(w http.ResponseWriter, r *http.Request) {
 		zHandler := &Z{
 			rw: w,
 			r:  r,
 		}
-
-		handler(zHandler)
+		finalHandler(zHandler)
 	})
 }
 
-func (app *App) PUT(path string, handler func(z *Z)) {
-	app.mux.HandleFunc(fmt.Sprintf("%s %s", http.MethodPut, path), func(w http.ResponseWriter, r *http.Request) {
-		zHandler := &Z{
-			rw: w,
-			r:  r,
-		}
-
-		handler(zHandler)
-	})
+func (app *App) GET(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	app.handle(http.MethodGet, path, handler, middlewares...)
 }
 
-func (app *App) POST(path string, handler func(z *Z)) {
-	app.mux.HandleFunc(fmt.Sprintf("%s %s", http.MethodPost, path), func(w http.ResponseWriter, r *http.Request) {
-		zHandler := &Z{
-			rw: w,
-			r:  r,
-		}
-
-		handler(zHandler)
-	})
+func (app *App) PUT(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	app.handle(http.MethodPut, path, handler, middlewares...)
 }
 
-func (app *App) PATCH(path string, handler func(z *Z)) {
-	app.mux.HandleFunc(fmt.Sprintf("%s %s", http.MethodPatch, path), func(w http.ResponseWriter, r *http.Request) {
-		zHandler := &Z{
-			rw: w,
-			r:  r,
-		}
-
-		handler(zHandler)
-	})
+func (app *App) POST(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	app.handle(http.MethodPost, path, handler, middlewares...)
 }
 
-func (app *App) DELETE(path string, handler func(z *Z)) {
-	app.mux.HandleFunc(fmt.Sprintf("%s %s", http.MethodDelete, path), func(w http.ResponseWriter, r *http.Request) {
-		zHandler := &Z{
-			rw: w,
-			r:  r,
-		}
+func (app *App) PATCH(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	app.handle(http.MethodPatch, path, handler, middlewares...)
+}
 
-		handler(zHandler)
-	})
+func (app *App) DELETE(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	app.handle(http.MethodDelete, path, handler, middlewares...)
 }

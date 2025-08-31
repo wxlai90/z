@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -158,7 +159,6 @@ func TestLoggingMiddleware_RequestBodyError(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logOutput, nil))
 	slog.SetDefault(logger)
 
-	// Simulate a broken request body
 	brokenBody := io.NopCloser(brokenReader{})
 	req := httptest.NewRequest("POST", "/error", brokenBody)
 	rr := httptest.NewRecorder()
@@ -182,4 +182,70 @@ type brokenReader struct{}
 
 func (brokenReader) Read([]byte) (int, error) {
 	return 0, io.ErrUnexpectedEOF
+}
+
+func TestLoggingMiddleware_LogFileOutput(t *testing.T) {
+	logFile := "test_log_output.json"
+	defer os.Remove(logFile)
+
+	req := httptest.NewRequest("GET", "/logfile", nil)
+	rr := httptest.NewRecorder()
+	z := &Z{rw: rr, r: req}
+
+	handler := func(z *Z) {
+		z.String(http.StatusOK, "LogFile Test")
+	}
+
+	loggingMiddleware := Middlewares.LoggingWithCfg(LoggingConfig{
+		LogFilePath:     logFile,
+		LogResponseBody: true,
+	})
+	wrappedHandler := loggingMiddleware(handler)
+	wrappedHandler(z)
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logStr := string(data)
+	if !strings.Contains(logStr, "LogFile Test") {
+		t.Errorf("Log file should contain response body 'LogFile Test', got: %s", logStr)
+	}
+	if !strings.Contains(logStr, `"method":"GET"`) {
+		t.Errorf("Log file should contain method GET")
+	}
+	if !strings.Contains(logStr, `"path":"/logfile"`) {
+		t.Errorf("Log file should contain path /logfile")
+	}
+	if !strings.Contains(logStr, `"status":200`) {
+		t.Errorf("Log file should contain status 200")
+	}
+}
+
+func TestLoggingMiddleware_LogFileOpenError(t *testing.T) {
+	invalidPath := "/invalid_path/test_log_output.json"
+
+	var logOutput bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logOutput, nil))
+	slog.SetDefault(logger)
+
+	req := httptest.NewRequest("GET", "/logfileerror", nil)
+	rr := httptest.NewRecorder()
+	z := &Z{rw: rr, r: req}
+
+	handler := func(z *Z) {
+		z.String(http.StatusOK, "Should not log to file")
+	}
+
+	loggingMiddleware := Middlewares.LoggingWithCfg(LoggingConfig{
+		LogFilePath:     invalidPath,
+		LogResponseBody: true,
+	})
+	wrappedHandler := loggingMiddleware(handler)
+	wrappedHandler(z)
+
+	logStr := logOutput.String()
+	if !strings.Contains(logStr, "Failed to open log file") {
+		t.Errorf("Expected error log for failed log file open, got: %s", logStr)
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -33,6 +34,7 @@ var Middlewares = middlewaresRegistry{}
 type LoggingConfig struct {
 	LogRequestBody  bool
 	LogResponseBody bool
+	LogFilePath     string
 }
 
 func (mr middlewaresRegistry) Logging() MiddlewareFunc {
@@ -42,6 +44,16 @@ func (mr middlewaresRegistry) Logging() MiddlewareFunc {
 func (mr middlewaresRegistry) LoggingWithCfg(cfg LoggingConfig) MiddlewareFunc {
 	return func(next HandlerFunc) HandlerFunc {
 		return func(z *Z) {
+			if cfg.LogFilePath != "" {
+				f, err := openLogFile(cfg.LogFilePath)
+				if err == nil {
+					logger := slog.New(slog.NewJSONHandler(f, nil))
+					slog.SetDefault(logger)
+				} else {
+					slog.Error("Failed to open log file", "err", err)
+				}
+			}
+
 			start := time.Now()
 
 			var requestBody []byte
@@ -88,4 +100,8 @@ func (mr middlewaresRegistry) LoggingWithCfg(cfg LoggingConfig) MiddlewareFunc {
 			slog.Info("Request handled", args...)
 		}
 	}
+}
+
+func openLogFile(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 }

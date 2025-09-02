@@ -95,3 +95,43 @@ func TestError(t *testing.T) {
 		t.Errorf("Expected body to contain 'test error', got '%s'", rw.Body.String())
 	}
 }
+
+func TestRedirect(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	rw := httptest.NewRecorder()
+	z := &Z{r: req, rw: rw}
+
+	z.Redirect("/new-url", http.StatusFound)
+
+	if rw.Code != http.StatusFound {
+		t.Errorf("Expected status %d, got %d", http.StatusFound, rw.Code)
+	}
+
+	if loc := rw.Header().Get("Location"); loc != "/new-url" {
+		t.Errorf("Expected Location header '/new-url', got '%s'", loc)
+	}
+}
+
+func TestFile(t *testing.T) {
+	rw := httptest.NewRecorder()
+	z := &Z{rw: rw}
+	fileBytes := []byte("test file content")
+
+	z.File(fileBytes, "test.txt")
+
+	if rw.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, rw.Code)
+	}
+
+	if cd := rw.Header().Get("Content-Disposition"); !strings.Contains(cd, `attachment; filename="test.txt"`) {
+		t.Errorf("Expected Content-Disposition header to contain 'attachment; filename=\"test.txt\"', got '%s'", cd)
+	}
+
+	if ct := rw.Header().Get("Content-Type"); ct != "application/octet-stream" {
+		t.Errorf("Expected Content-Type header 'application/octet-stream', got '%s'", ct)
+	}
+
+	if rw.Body.String() != "test file content" {
+		t.Errorf("Expected body 'test file content', got '%s'", rw.Body.String())
+	}
+}

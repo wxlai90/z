@@ -2,6 +2,7 @@ package z
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
@@ -34,4 +35,15 @@ func (z *Z) SetCookie(cookie *http.Cookie) {
 
 func (z *Z) Error(err error, code int) {
 	http.Error(z.rw, err.Error(), code)
+}
+
+func (z *Z) Redirect(url string, code int) {
+	http.Redirect(z.rw, z.r, url, code)
+}
+
+func (z *Z) File(fileBytes []byte, filename string) {
+	z.rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	z.rw.Header().Set("Content-Type", "application/octet-stream")
+	z.rw.WriteHeader(http.StatusOK)
+	z.rw.Write(fileBytes)
 }

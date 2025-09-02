@@ -72,6 +72,8 @@ func main() {
 - `SetHeader(key, value string)`: Sets a response header.
 - `SetCookie(cookie *http.Cookie)`: Sets a cookie.
 - `Error(err error, code int)`: Sends an error response.
+- `Redirect(url string, code int)`: Redirects to a URL with the given status code.
+- `File(fileBytes []byte, filename string)`: Sends a file for download with the specified filename.
 
 ### Escape Hatches
 
@@ -83,23 +85,43 @@ When you need to break out of the z framework's abstractions and access the unde
 #### Example Usage
 
 ```go
-app.GET("/download", func(z *z.Z) {
-    w := z.ResponseWriter()
-    w.Header().Set("Content-Disposition", "attachment; filename=file.txt")
-    w.Header().Set("Content-Type", "application/octet-stream")
-
-    w.Write([]byte("large file content..."))
+app.GET("/string", func(z *z.Z) {
+	z.String(200, "plain text response")
 })
 
-app.POST("/upload", func(z *z.Z) {
-    r := z.Request()
+app.GET("/json", func(z *z.Z) {
+	z.JSON(200, map[string]string{"message": "hello"})
+})
 
-    if r.ContentLength > 10*1024*1024 {
-        z.Error(fmt.Errorf("file too large"), http.StatusRequestEntityTooLarge)
-        return
-    }
+app.GET("/ok", func(z *z.Z) {
+	z.Ok("Everything is OK!")
+})
 
-    z.Ok("Upload processed")
+app.GET("/okjson", func(z *z.Z) {
+	z.OkJSON(map[string]string{"status": "ok"})
+})
+
+app.GET("/header", func(z *z.Z) {
+	z.SetHeader("X-Custom-Header", "value")
+	z.Ok("Header set!")
+})
+
+app.GET("/cookie", func(z *z.Z) {
+	z.SetCookie(&http.Cookie{Name: "token", Value: "abc123"})
+	z.Ok("Cookie set!")
+})
+
+app.GET("/error", func(z *z.Z) {
+	z.Error(fmt.Errorf("something went wrong"), 500)
+})
+
+app.GET("/redirect", func(z *z.Z) {
+	z.Redirect("/new-location", http.StatusFound)
+})
+
+app.GET("/file", func(z *z.Z) {
+	data := []byte("file content here")
+	z.File(data, "test.txt")
 })
 ```
 

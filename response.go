@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 )
 
 func (z *Z) String(statusCode int, respStr string) {
@@ -41,9 +42,15 @@ func (z *Z) Redirect(url string, code int) {
 	http.Redirect(z.rw, z.r, url, code)
 }
 
-func (z *Z) File(fileBytes []byte, filename string) {
-	z.rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	z.rw.Header().Set("Content-Type", "application/octet-stream")
-	z.rw.WriteHeader(http.StatusOK)
-	z.rw.Write(fileBytes)
+func (z *Z) ServeFile(filename string, forceDownload bool) {
+	if forceDownload {
+		name := filepath.Base(filename)
+		z.rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", name))
+	}
+
+	http.ServeFile(z.rw, z.r, filename)
+}
+
+func (z *Z) ServeDir(path string) {
+	z.GET(path, http.FileServer(http.Dir(path)))
 }

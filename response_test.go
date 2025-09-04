@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -112,26 +114,53 @@ func TestRedirect(t *testing.T) {
 	}
 }
 
-func TestFile(t *testing.T) {
-	rw := httptest.NewRecorder()
-	z := &Z{rw: rw}
-	fileBytes := []byte("test file content")
-
-	z.File(fileBytes, "test.txt")
-
-	if rw.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, rw.Code)
+func TestServeFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test.txt")
+	content := []byte("test file content")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
 	}
 
-	if cd := rw.Header().Get("Content-Disposition"); !strings.Contains(cd, `attachment; filename="test.txt"`) {
-		t.Errorf("Expected Content-Disposition header to contain 'attachment; filename=\"test.txt\"', got '%s'", cd)
-	}
+	t.Run("forceDownload=false", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rw := httptest.NewRecorder()
+		z := &Z{r: req, rw: rw}
 
-	if ct := rw.Header().Get("Content-Type"); ct != "application/octet-stream" {
-		t.Errorf("Expected Content-Type header 'application/octet-stream', got '%s'", ct)
-	}
+		z.ServeFile(path, false)
 
-	if rw.Body.String() != "test file content" {
-		t.Errorf("Expected body 'test file content', got '%s'", rw.Body.String())
-	}
+		if rw.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d", http.StatusOK, rw.Code)
+		}
+		if cd := rw.Header().Get("Content-Disposition"); cd != "" {
+			t.Fatalf("Expected no Content-Disposition when forceDownload=false, got '%s'", cd)
+		}
+		if ct := rw.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+			t.Fatalf("Expected Content-Type to start with 'text/plain', got '%s'", ct)
+		}
+		if body := rw.Body.String(); body != string(content) {
+			t.Fatalf("Expected body %q, got %q", string(content), body)
+		}
+	})
+
+	t.Run("forceDownload=true", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rw := httptest.NewRecorder()
+		z := &Z{r: req, rw: rw}
+
+		z.ServeFile(path, true)
+
+		if rw.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d", http.StatusOK, rw.Code)
+		}
+		if cd := rw.Header().Get("Content-Disposition"); !strings.Contains(cd, `attachment; filename="test.txt"`) {
+			t.Fatalf("Expected Content-Disposition to contain 'attachment; filename=\"test.txt\"', got '%s'", cd)
+		}
+		if ct := rw.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+			t.Fatalf("Expected Content-Type to start with 'text/plain', got '%s'", ct)
+		}
+		if body := rw.Body.String(); body != string(content) {
+			t.Fatalf("Expected body %q, got %q", string(content), body)
+		}
+	})
 }

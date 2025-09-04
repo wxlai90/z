@@ -50,7 +50,3 @@ func (z *Z) ServeFile(filename string, forceDownload bool) {
 
 	http.ServeFile(z.rw, z.r, filename)
 }
-
-func (z *Z) ServeDir(path string) {
-	z.GET(path, http.FileServer(http.Dir(path)))
-}

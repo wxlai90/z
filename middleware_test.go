@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMiddlewareFunc(t *testing.T) {
@@ -247,5 +248,149 @@ func TestLoggingMiddleware_LogFileOpenError(t *testing.T) {
 	logStr := logOutput.String()
 	if !strings.Contains(logStr, "Failed to open log file") {
 		t.Errorf("Expected error log for failed log file open, got: %s", logStr)
+	}
+}
+
+func TestRecoveryMiddleware(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	z := &Z{rw: rr, r: req}
+
+	handler := func(z *Z) {
+		panic("test panic")
+	}
+
+	recoveryMiddleware := Middlewares.Recovery()
+	wrappedHandler := recoveryMiddleware(handler)
+	wrappedHandler(z)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status code %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+
+	if rr.Body.String() != "Internal Server Error" {
+		t.Errorf("Expected body %q, got %q", "Internal Server Error", rr.Body.String())
+	}
+}
+
+func TestRequestIDMiddleware(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	z := &Z{rw: rr, r: req}
+
+	handler := func(z *Z) {
+		z.String(http.StatusOK, "Hello, World!")
+	}
+
+	requestIDMiddleware := Middlewares.RequestID()
+	wrappedHandler := requestIDMiddleware(handler)
+	wrappedHandler(z)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	if req.Header.Get("X-Request-ID") == "" {
+		t.Error("Expected X-Request-ID header to be set in the request")
+	}
+
+	if rr.Header().Get("X-Request-ID") == "" {
+		t.Error("Expected X-Request-ID header to be set in the response")
+	}
+}
+
+func TestCORSMiddleware(t *testing.T) {
+	req := httptest.NewRequest("OPTIONS", "/", nil)
+	rr := httptest.NewRecorder()
+	z := &Z{rw: rr, r: req}
+
+	handler := func(z *Z) {}
+
+	corsMiddleware := Middlewares.CORS()
+	wrappedHandler := corsMiddleware(handler)
+	wrappedHandler(z)
+
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("Expected status code %d, got %d", http.StatusNoContent, rr.Code)
+	}
+
+	if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Errorf("Expected Access-Control-Allow-Origin header to be %q, got %q", "*", rr.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestCORSMiddleware_NonOptions_CallsNext(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	z := &Z{rw: rr, r: req}
+
+	called := false
+	handler := func(z *Z) { called = true; z.String(http.StatusOK, "ok") }
+
+	corsMiddleware := Middlewares.CORS()
+	wrappedHandler := corsMiddleware(handler)
+	wrappedHandler(z)
+
+	if !called {
+		t.Fatalf("expected next to be called for non-OPTIONS request")
+	}
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if rr.Header().Get("Access-Control-Allow-Origin") == "" {
+		t.Fatalf("expected CORS headers to be set on non-OPTIONS request as well")
+	}
+}
+
+func TestSecurityHeadersMiddleware(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	z := &Z{rw: rr, r: req}
+
+	handler := func(z *Z) {}
+
+	securityHeadersMiddleware := Middlewares.SecurityHeaders()
+	wrappedHandler := securityHeadersMiddleware(handler)
+	wrappedHandler(z)
+
+	if rr.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("Expected X-Content-Type-Options header to be %q, got %q", "nosniff", rr.Header().Get("X-Content-Type-Options"))
+	}
+}
+
+func TestTimeoutMiddleware(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	z := &Z{rw: rr, r: req}
+
+	handler := func(z *Z) {
+		time.Sleep(100 * time.Millisecond)
+		z.String(http.StatusOK, "Hello, World!")
+	}
+
+	timeoutMiddleware := Middlewares.TimeoutWithCfg(TimeoutConfig{Timeout: 50 * time.Millisecond})
+	wrappedHandler := timeoutMiddleware(handler)
+	wrappedHandler(z)
+
+	if rr.Code != http.StatusGatewayTimeout {
+		t.Errorf("Expected status code %d, got %d", http.StatusGatewayTimeout, rr.Code)
+	}
+}
+
+func TestTimeoutMiddleware_Default_NoTimeout(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	z := &Z{rw: rr, r: req}
+
+	handler := func(z *Z) {
+		z.String(http.StatusOK, "fast")
+	}
+
+	timeoutMiddleware := Middlewares.Timeout()
+	wrappedHandler := timeoutMiddleware(handler)
+	wrappedHandler(z)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 }

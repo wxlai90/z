@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -112,5 +113,84 @@ func TestSaveUploadedFile_DirectoryCreation(t *testing.T) {
 
 	if _, err := os.Stat(dstPath); os.IsNotExist(err) {
 		t.Fatal("File was not created in nested directory")
+	}
+}
+
+type fakeResponseWriter struct{}
+
+func (f *fakeResponseWriter) Header() http.Header        { return http.Header{} }
+func (f *fakeResponseWriter) Write([]byte) (int, error)  { return 0, nil }
+func (f *fakeResponseWriter) WriteHeader(statusCode int) {}
+
+func TestSaveUploadedFile_CreateDestFail(t *testing.T) {
+	tmpDir := t.TempDir()
+	dstPath := filepath.Join(tmpDir, "as_dir")
+	if err := os.MkdirAll(dstPath, 0o755); err != nil {
+		t.Fatalf("setup mkdir failed: %v", err)
+	}
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	fileWriter, err := writer.CreateFormFile("file", "a.txt")
+	if err != nil {
+		t.Fatalf("CreateFormFile: %v", err)
+	}
+	_, _ = io.WriteString(fileWriter, "x")
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if err := req.ParseMultipartForm(32 << 20); err != nil {
+		t.Fatalf("ParseMultipartForm: %v", err)
+	}
+
+	z := &Z{rw: &fakeResponseWriter{}, r: req}
+
+	if err := z.SaveUploadedFile("file", dstPath); err == nil || !strings.Contains(err.Error(), "failed to create destination file") {
+		t.Fatalf("expected create dest error, got %v", err)
+	}
+}
+
+func TestSaveUploadedFile_CopyFail(t *testing.T) {
+	old := copyFile
+	copyFile = func(dst io.Writer, src io.Reader) (int64, error) { return 0, io.ErrClosedPipe }
+	t.Cleanup(func() { copyFile = old })
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	fileWriter, _ := writer.CreateFormFile("file", "a.txt")
+	_, _ = io.WriteString(fileWriter, "x")
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	_ = req.ParseMultipartForm(32 << 20)
+
+	z := &Z{rw: &fakeResponseWriter{}, r: req}
+	dst := filepath.Join(t.TempDir(), "out.txt")
+	if err := z.SaveUploadedFile("file", dst); err == nil || !strings.Contains(err.Error(), "failed to write file") {
+		t.Fatalf("expected copy error, got %v", err)
+	}
+}
+
+func TestSaveUploadedFile_MkdirFail(t *testing.T) {
+	oldMk := mkdirAll
+	mkdirAll = func(path string, perm os.FileMode) error { return os.ErrPermission }
+	t.Cleanup(func() { mkdirAll = oldMk })
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	fileWriter, _ := writer.CreateFormFile("file", "a.txt")
+	_, _ = io.WriteString(fileWriter, "x")
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	_ = req.ParseMultipartForm(32 << 20)
+
+	z := &Z{rw: &fakeResponseWriter{}, r: req}
+	dst := filepath.Join(t.TempDir(), "sub", "out.txt")
+	if err := z.SaveUploadedFile("file", dst); err == nil || !strings.Contains(err.Error(), "failed to create directory") {
+		t.Fatalf("expected mkdir error, got %v", err)
 	}
 }

@@ -73,7 +73,7 @@ func main() {
 - `SetCookie(cookie *http.Cookie)`: Sets a cookie.
 - `Error(err error, code int)`: Sends an error response.
 - `Redirect(url string, code int)`: Redirects to a URL with the given status code.
-- `File(fileBytes []byte, filename string)`: Sends a file for download with the specified filename.
+- `ServeFile(filename string, forceDownload bool)`: Serves a file from disk; when `forceDownload` is true, sets `Content-Disposition` to trigger a download.
 
 ### Escape Hatches
 
@@ -120,8 +120,8 @@ app.GET("/redirect", func(z *z.Z) {
 })
 
 app.GET("/file", func(z *z.Z) {
-	data := []byte("file content here")
-	z.File(data, "test.txt")
+	// true/false for force download
+	z.ServeFile("/path/to/test.txt", true)
 })
 ```
 

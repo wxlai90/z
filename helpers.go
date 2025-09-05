@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 )
 
+var copyFile = io.Copy
+var mkdirAll = os.MkdirAll
+
 func (z *Z) SaveUploadedFile(key string, dstPath string) error {
 	file, _, err := z.FormFile(key)
 	if err != nil {
@@ -15,7 +18,7 @@ func (z *Z) SaveUploadedFile(key string, dstPath string) error {
 	defer file.Close()
 
 	if dir := filepath.Dir(dstPath); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := mkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 	}
@@ -26,7 +29,7 @@ func (z *Z) SaveUploadedFile(key string, dstPath string) error {
 	}
 	defer out.Close()
 
-	if _, err := io.Copy(out, file); err != nil {
+	if _, err := copyFile(out, file); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 

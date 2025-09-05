@@ -2,10 +2,15 @@ package z
 
 import (
 	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -104,4 +109,174 @@ func (mr middlewaresRegistry) LoggingWithCfg(cfg LoggingConfig) MiddlewareFunc {
 
 func openLogFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+}
+
+type RecoveryConfig struct {
+	LogPanic bool
+}
+
+func (middlewaresRegistry) Recovery() MiddlewareFunc {
+	return Middlewares.RecoveryWithCfg(RecoveryConfig{LogPanic: true})
+}
+
+func (middlewaresRegistry) RecoveryWithCfg(cfg RecoveryConfig) MiddlewareFunc {
+	return func(next HandlerFunc) HandlerFunc {
+		return func(z *Z) {
+			defer func() {
+				if err := recover(); err != nil {
+					if cfg.LogPanic {
+						log.Printf("Recovered from panic: %v", err)
+					}
+					z.String(http.StatusInternalServerError, "Internal Server Error")
+				}
+			}()
+			next(z)
+		}
+	}
+}
+
+type RequestIDConfig struct {
+	HeaderName string
+}
+
+func (middlewaresRegistry) RequestID() MiddlewareFunc {
+	return Middlewares.RequestIDWithCfg(RequestIDConfig{HeaderName: "X-Request-ID"})
+}
+
+func (middlewaresRegistry) RequestIDWithCfg(cfg RequestIDConfig) MiddlewareFunc {
+	return func(next HandlerFunc) HandlerFunc {
+		return func(z *Z) {
+			reqID := z.r.Header.Get(cfg.HeaderName)
+			if reqID == "" {
+				reqID = generateRequestID()
+			}
+			z.r.Header.Set(cfg.HeaderName, reqID)
+			z.rw.Header().Set(cfg.HeaderName, reqID)
+			next(z)
+		}
+	}
+}
+
+func generateRequestID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return "req-" + hex.EncodeToString(b)
+}
+
+type CORSConfig struct {
+	AllowOrigin      string
+	AllowMethods     string
+	AllowHeaders     string
+	AllowCredentials bool
+	MaxAge           int
+}
+
+func (middlewaresRegistry) CORS() MiddlewareFunc {
+	return Middlewares.CORSWithCfg(CORSConfig{
+		AllowOrigin:      "*",
+		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+		AllowHeaders:     "Content-Type,Authorization",
+		AllowCredentials: true,
+		MaxAge:           3600,
+	})
+}
+
+func (middlewaresRegistry) CORSWithCfg(cfg CORSConfig) MiddlewareFunc {
+	return func(next HandlerFunc) HandlerFunc {
+		return func(z *Z) {
+			z.rw.Header().Set("Access-Control-Allow-Origin", cfg.AllowOrigin)
+			z.rw.Header().Set("Access-Control-Allow-Methods", cfg.AllowMethods)
+			z.rw.Header().Set("Access-Control-Allow-Headers", cfg.AllowHeaders)
+			if cfg.AllowCredentials {
+				z.rw.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+			if cfg.MaxAge > 0 {
+				z.rw.Header().Set("Access-Control-Max-Age", strconv.Itoa(cfg.MaxAge))
+			}
+			if z.r.Method == "OPTIONS" {
+				z.rw.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next(z)
+		}
+	}
+}
+
+type SecurityHeadersConfig struct {
+	ContentTypeOptions    string
+	FrameOptions          string
+	XSSProtection         string
+	StrictTransportPolicy string
+	ContentSecurityPolicy string
+	ReferrerPolicy        string
+}
+
+func (middlewaresRegistry) SecurityHeaders() MiddlewareFunc {
+	return Middlewares.SecurityHeadersWithCfg(SecurityHeadersConfig{
+		ContentTypeOptions:    "nosniff",
+		FrameOptions:          "DENY",
+		XSSProtection:         "1; mode=block",
+		StrictTransportPolicy: "max-age=31536000; includeSubDomains",
+		ContentSecurityPolicy: "default-src 'self'",
+		ReferrerPolicy:        "no-referrer",
+	})
+}
+
+func (middlewaresRegistry) SecurityHeadersWithCfg(cfg SecurityHeadersConfig) MiddlewareFunc {
+	return func(next HandlerFunc) HandlerFunc {
+		return func(z *Z) {
+			if cfg.ContentTypeOptions != "" {
+				z.rw.Header().Set("X-Content-Type-Options", cfg.ContentTypeOptions)
+			}
+			if cfg.FrameOptions != "" {
+				z.rw.Header().Set("X-Frame-Options", cfg.FrameOptions)
+			}
+			if cfg.XSSProtection != "" {
+				z.rw.Header().Set("X-XSS-Protection", cfg.XSSProtection)
+			}
+			if cfg.StrictTransportPolicy != "" {
+				z.rw.Header().Set("Strict-Transport-Security", cfg.StrictTransportPolicy)
+			}
+			if cfg.ContentSecurityPolicy != "" {
+				z.rw.Header().Set("Content-Security-Policy", cfg.ContentSecurityPolicy)
+			}
+			if cfg.ReferrerPolicy != "" {
+				z.rw.Header().Set("Referrer-Policy", cfg.ReferrerPolicy)
+			}
+			next(z)
+		}
+	}
+}
+
+type TimeoutConfig struct {
+	Timeout time.Duration
+}
+
+func (middlewaresRegistry) Timeout() MiddlewareFunc {
+	return Middlewares.TimeoutWithCfg(TimeoutConfig{Timeout: 30 * time.Second})
+}
+
+func (middlewaresRegistry) TimeoutWithCfg(cfg TimeoutConfig) MiddlewareFunc {
+	return func(next HandlerFunc) HandlerFunc {
+		return func(z *Z) {
+			ctx, cancel := context.WithTimeout(z.r.Context(), cfg.Timeout)
+			defer cancel()
+
+			z.r = z.r.WithContext(ctx)
+
+			done := make(chan struct{})
+			go func() {
+				next(z)
+				close(done)
+			}()
+
+			select {
+			case <-done:
+			case <-ctx.Done():
+				if ctx.Err() == context.DeadlineExceeded {
+					z.String(http.StatusGatewayTimeout, "Request timed out")
+				}
+			}
+		}
+	}
 }
